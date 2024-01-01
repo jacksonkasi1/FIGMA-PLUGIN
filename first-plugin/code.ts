@@ -1,35 +1,84 @@
-// This plugin will open a window to prompt the user to enter a number, and
-// it will then create that many rectangles on the screen.
-
-// This file holds the main code for plugins. Code in this file has access to
-// the *figma document* via the figma global object.
-// You can access browser APIs in the <script> tag inside "ui.html" which has a
-// full browser environment (See https://www.figma.com/plugin-docs/how-plugins-run).
-
-// This shows the HTML page in "ui.html".
 figma.showUI(__html__);
 
-// Calls to "parent.postMessage" from within the HTML page will trigger this
-// callback. The callback will be passed the "pluginMessage" property of the
-// posted message.
-figma.ui.onmessage = (msg) => {
-  // One way of distinguishing between different types of messages sent from
-  // your HTML page is to use an object with a "type" property like this.
-  if (msg.type === "create-rectangles") {
-    const nodes: SceneNode[] = [];
-    for (let i = 0; i < msg.count; i++) {
-      const rect = figma.createEllipse();
-      rect.x = i * 150;
-      rect.y = i * 150;
-      rect.fills = [{ type: "SOLID", color: { r: 1, g: 0.1, b: 0 } }];
-      figma.currentPage.appendChild(rect);
-      nodes.push(rect);
-    }
-    figma.currentPage.selection = nodes;
-    figma.viewport.scrollAndZoomIntoView(nodes);
-  }
+figma.ui.resize(600, 700);
 
-  // Make sure to close the plugin when you're done. Otherwise the plugin will
-  // keep running, which shows the cancel button at the bottom of the screen.
+enum ImageVariant {
+  no_image = "no_image",
+  single_image = "single_image",
+  carousel = "carousel",
+}
+
+interface Message {
+  darkModeState: boolean;
+  description: string;
+  imageVariant: ImageVariant;
+  name: string;
+  username: string;
+}
+
+type PostVariantType = {
+  [key in `${"dark" | "light"}_${ImageVariant}`]: string;
+};
+
+const types: PostVariantType = {
+  dark_no_image: "Image=none, Dark mode=true",
+  light_no_image: "Image=none, Dark mode=false",
+
+  dark_single_image: "Image=single, Dark mode=true",
+  light_single_image: "Image=single, Dark mode=false",
+
+  dark_carousel: "Image=carousel, Dark mode=true",
+  light_carousel: "Image=carousel, Dark mode=false",
+};
+
+figma.ui.onmessage = async (message: Message) => {
+  await figma.loadFontAsync({ family: "Rubik", style: "Regular" });
+
+  const { name, username, description, darkModeState, imageVariant } = message;
+
+  const postComponentSet = figma.root.findOne(
+    (node) => node.type === "COMPONENT_SET" && node.name === "post",
+  ) as ComponentSetNode;
+
+  const mode = darkModeState ? "dark" : "light";
+  const variantKey = `${mode}_${imageVariant}` as keyof PostVariantType;
+
+  const variant = types[variantKey];
+
+  const component = postComponentSet.findOne(
+    (node) => node.type === "COMPONENT" && node.name === variant,
+  ) as ComponentNode;
+
+  const newPost = component.createInstance();
+
+  const templateName = newPost.findOne(
+    (node) => node.type === "TEXT" && node.name === "displayName",
+  ) as TextNode;
+  const templateUsername = newPost.findOne(
+    (node) => node.type === "TEXT" && node.name === "@username",
+  ) as TextNode;
+  const templateDescription = newPost.findOne(
+    (node) => node.type === "TEXT" && node.name === "description",
+  ) as TextNode;
+
+  const numLinks = newPost.findOne(
+    (node) => node.type === "TEXT" && node.name === "likesLabel",
+  ) as TextNode;
+
+  const numComments = newPost.findOne(
+    (node) => node.type === "TEXT" && node.name === "commentsLabel",
+  ) as TextNode;
+
+  templateName.characters = name;
+  templateUsername.characters = username;
+  templateDescription.characters = description;
+  numLinks.characters = (Math.floor(Math.random() * 1000) + 1).toString();
+  numComments.characters = (Math.floor(Math.random() * 1000) + 1).toString();
+
+  figma.viewport.scrollAndZoomIntoView([newPost]);
+
   figma.closePlugin();
 };
+
+//   const defaultVariant = postComponentSet.defaultVariant as ComponentNode;
+//   const test = postComponentSet.findOne( (node) => node.type === "COMPONENT" && node.name === "Image=single, Dark mode=true", ) as ComponentNode;
